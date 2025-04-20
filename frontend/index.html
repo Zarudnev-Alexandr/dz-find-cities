@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        h2 {
+            color: #555;
+            margin-top: 20px;
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #suggestions {
+            margin-top: 10px;
+        }
+        #dynamic-section {
+            margin-top: 20px;
+        }
+        #all-cities-list, #search-result, #nearest-result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        #message {
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>City Manager</h1>
+
+    <div>
+        <label for="city-input">Search for a city:</label>
+        <input type="text" id="city-input" placeholder="Enter city name">
+        <button id="suggest-button">Suggest</button>
+        <div id="suggestions"></div>
+        <div id="message"></div>
+    </div>
+
+    <div>
+        <button onclick="showAllCities()">View All Cities</button>
+        <button onclick="showSearchCity()">Search City</button>
+        <button onclick="showFindNearest()">Find Nearest Cities</button>
+    </div>
+
+    <div id="dynamic-section">
+        <div id="all-cities-section" style="display: none;">
+            <h2>All Cities</h2>
+            <div id="all-cities-list"></div>
+        </div>
+        <div id="search-city-section" style="display: none;">
+            <h2>Search City</h2>
+            <input type="text" id="search-input" placeholder="Enter city name">
+            <button onclick="searchCity()">Search</button>
+            <div id="search-result"></div>
+        </div>
+        <div id="find-nearest-section" style="display: none;">
+            <h2>Find Nearest Cities</h2>
+            <input type="text" id="nearest-input" placeholder="Enter city name">
+            <button onclick="findNearest()">Find Nearest</button>
+            <div id="nearest-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Определяем базовый URL для всех запросов
+        const BASE_URL = 'http://localhost:8000';
+
+        document.getElementById('suggest-button').addEventListener('click', function() {
+            const query = document.getElementById('city-input').value;
+            if (query.length > 0) {
+                fetchSuggestions(query);
+            }
+        });
+
+        async function fetchSuggestions(query) {
+            try {
+                const response = await fetch(`${BASE_URL}/city/?city_name=${encodeURIComponent(query)}`);
+                const suggestions = await response.json();
+                displaySuggestions(suggestions);
+            } catch (error) {
+                console.error('Error fetching suggestions:', error);
+                document.getElementById('message').textContent = 'Error fetching suggestions';
+            }
+        }
+
+        function displaySuggestions(suggestions) {
+            const suggestionsDiv = document.getElementById('suggestions');
+            suggestionsDiv.innerHTML = '';
+            suggestions.forEach(city => {
+                const cityDiv = document.createElement('div');
+                cityDiv.textContent = city.display_name;
+                const addButton = document.createElement('button');
+                addButton.textContent = 'Add';
+                addButton.setAttribute('data-osm-type', city.osm_type);
+                addButton.setAttribute('data-osm-id', city.osm_id);
+                addButton.onclick = function() {
+                    addCity(this.getAttribute('data-osm-type'), this.getAttribute('data-osm-id'));
+                };
+                cityDiv.appendChild(addButton);
+                suggestionsDiv.appendChild(cityDiv);
+            });
+        }
+
+        async function addCity(osmType, osmId) {
+            try {
+                const response = await fetch(`${BASE_URL}/city/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ osm_type: osmType, osm_id: parseInt(osmId) })
+                });
+                if (response.ok) {
+                    document.getElementById('message').textContent = 'City added successfully';
+                    document.getElementById('suggestions').innerHTML = '';
+                    document.getElementById('city-input').value = '';
+                } else {
+                    document.getElementById('message').textContent = 'Failed to add city';
+                }
+            } catch (error) {
+                console.error('Error adding city:', error);
+                document.getElementById('message').textContent = 'Error adding city';
+            }
+        }
+
+        function hideAllSections() {
+            document.getElementById('all-cities-section').style.display = 'none';
+            document.getElementById('search-city-section').style.display = 'none';
+            document.getElementById('find-nearest-section').style.display = 'none';
+        }
+
+        async function showAllCities() {
+            hideAllSections();
+            document.getElementById('all-cities-section').style.display = 'block';
+            try {
+                const response = await fetch(`${BASE_URL}/city/all`);
+                const cities = await response.json();
+                const listDiv = document.getElementById('all-cities-list');
+                listDiv.innerHTML = '';
+                cities.forEach(city => {
+                    const cityDiv = document.createElement('div');
+                    cityDiv.textContent = `${city.name} (Lat: ${city.latitude}, Lon: ${city.longitude})`;
+                    listDiv.appendChild(cityDiv);
+                });
+            } catch (error) {
+                console.error('Error fetching all cities:', error);
+                document.getElementById('all-cities-list').textContent = 'Error fetching cities';
+            }
+        }
+
+        function showSearchCity() {
+            hideAllSections();
+            document.getElementById('search-city-section').style.display = 'block';
+            document.getElementById('search-result').innerHTML = '';
+        }
+
+        async function searchCity() {
+            const cityName = document.getElementById('search-input').value;
+            if (!cityName) return;
+            try {
+                const response = await fetch(`${BASE_URL}/city/${encodeURIComponent(cityName)}`);
+                if (response.ok) {
+                    const city = await response.json();
+                    const resultDiv = document.getElementById('search-result');
+                    resultDiv.innerHTML = `${city.name} (Lat: ${city.latitude}, Lon: ${city.longitude})`;
+                } else {
+                    document.getElementById('search-result').textContent = 'City not found';
+                }
+            } catch (error) {
+                console.error('Error searching city:', error);
+                document.getElementById('search-result').textContent = 'Error searching city';
+            }
+        }
+
+        function showFindNearest() {
+            hideAllSections();
+            document.getElementById('find-nearest-section').style.display = 'block';
+            document.getElementById('nearest-result').innerHTML = '';
+        }
+
+        async function findNearest() {
+            const cityName = document.getElementById('nearest-input').value;
+            if (!cityName) return;
+            try {
+                const response = await fetch(`${BASE_URL}/city/${encodeURIComponent(cityName)}/nearest`);
+                if (response.ok) {
+                    const nearest = await response.json();
+                    const resultDiv = document.getElementById('nearest-result');
+                    resultDiv.innerHTML = '';
+                    nearest.forEach(city => {
+                        const cityDiv = document.createElement('div');
+                        cityDiv.textContent = `${city.name} (Distance: ${city.distance_km.toFixed(2)} km)`;
+                        resultDiv.appendChild(cityDiv);
+                    });
+                } else {
+                    document.getElementById('nearest-result').textContent = 'No nearest cities found';
+                }
+            } catch (error) {
+                console.error('Error finding nearest cities:', error);
+                document.getElementById('nearest-result').textContent = 'Error finding nearest cities';
+            }
+        }
+    </script>
+</body>
+</html>
